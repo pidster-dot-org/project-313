@@ -32,3 +32,18 @@ The following system properties will also configure the loader:
 An alternative name for the properties file can be specified:
 
     java -Dboot.properties.file=myboot.properties -cp boot-loader.jar org.pidster.boot.loader.Main arg1 arg2 arg3
+
+### Maven Coordinates
+
+For Gradle users:
+
+    compile "org.pidster:boot-loader:0.1-SNAPSHOT"
+
+For Maven users:
+
+    <dependency>
+     <groupId>org.pidster</groupId>
+     <artifactId>boot-loader</artifactId>
+     <version>0.1-SNAPSHOT</version>
+    </dependency>
+

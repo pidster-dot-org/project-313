@@ -1,0 +1,86 @@
+/*
+ * Copyright 2013 The Original Author
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ */
+
+apply plugin: 'signing'
+apply plugin: 'publishing'
+apply plugin: 'maven-publish'
+
+signing {
+    ext.isReleaseVersion = !version.endsWith("SNAPSHOT")
+    signing {
+        required { isReleaseVersion }
+        sign configurations.archives
+    }
+}
+
+publishing {
+    publications {
+        mavenCentral(MavenPublication) {
+            from components.java
+            artifact sourceJar {
+                classifier "source"
+            }
+            pom {
+//                project {
+//                    name rootProject.name
+//                    description 'Simple boot loader'
+//                    groupId rootProject.group
+//                    inceptionYear '2013'
+//                    packaging 'jar'
+//                    url 'http://pidster.org'
+//            
+//                    developers {
+//                        developer {
+//                            id 'pidster'
+//                            name 'Pid'
+//                            email 'pid@pidster.org'
+//                        }
+//                    }
+//            
+//                    scm {
+//                        connection 'scm:https://vert-x@github.com/pidster-dot-org/boot-loader'
+//                        developerConnection 'scm:git@github.com:pidster-dot-org/boot-loader.git'
+//                        url 'https://github.com/pidster-dot-org/boot-loader'
+//                    }
+//            
+//                    licenses {
+//                        license {
+//                            name 'The Apache Software License, Version 2.0'
+//                            url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+//                            distribution 'repo'
+//                        }
+//                    }
+//            
+//                    properties {
+//                        setProperty('project.build.sourceEncoding', 'UTF8')
+//                    }
+//                }
+            }
+        }
+    }
+
+    repositories {
+        maven {
+            name 'snapshots'
+            url 'https://oss.sonatype.org/content/repositories/snapshots'
+        }
+        maven {
+            name 'staging'
+            url 'https://oss.sonatype.org/service/local/staging/deploy/maven2'
+        }
+    }
+}

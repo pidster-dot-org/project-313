@@ -34,9 +34,10 @@ jar {
     manifest {
         attributes (
             'Main-Class':'org.pidster.boot.loader.Main',
-            'Implementation-Name': 'Simple Boot Loader',
-            'Implementation-Vendor': 'pidster.org',
-            'Implementation-Version': project.version
+            'Specification-Name': 'Simple Boot Loader',
+            'Specification-Vendor': 'pidster.org',
+            'Specification-Version': project.version,
+            'Section': 'org.pidster.boot.loader'
         )
     }
 }

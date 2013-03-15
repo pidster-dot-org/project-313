@@ -24,10 +24,6 @@ import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -89,23 +85,9 @@ public class Loader implements Runnable {
 
         logProperties(bootPrefix);
 
-        // derive HOME directory from prefix property
-        String homeDir = System.getProperty(String.format("%s.home", bootPrefix));
-        if (homeDir == null) {
-            throw new IllegalStateException(String.format("The system property '%s' MUST be set", String.format("%s.home", bootPrefix)));
-        }
-
-        File home = new File(homeDir);
-        if (!home.exists() || !home.isDirectory()) {
-            throw new IllegalArgumentException(String.format("'%s' is not a valid home directory", homeDir));
-        }
-
-        // Create application classpath from JARs
-        URL[] array = jarFinder(homeDir);
-        Class<?> init = load(bootPrefix, array);
-
-        // type detection and initialization
         try {
+            // type detection and initialization
+            Class<?> init = load(bootPrefix);
             initialize(bootPrefix, init);
         } catch (InterruptedException e) {
             log.log(Level.WARNING, "Interrupted...", e);
@@ -153,48 +135,54 @@ public class Loader implements Runnable {
     }
 
     /**
-     * @param homeDir
-     * @return array of URL
+     * @param bootPrefix
+     * @return class
      */
-    private URL[] jarFinder(String homeDir) {
-        File libDir = new File(homeDir, "lib");
-        File[] jars = libDir.listFiles(new JarFileFilter());
+    private Class<?> load(String bootPrefix) {
 
-        URL[] array = new URL[0];
-
-        try {
-            Set<URL> jarURLs = new HashSet<URL>();
-            for (File jar : jars) {
-                URL url = jar.toURI().toURL();
-                jarURLs.add(url);
-            }
-
-            array = new URL[jarURLs.size()];
-            array = jarURLs.toArray(array);
-
-        } catch (MalformedURLException e) {
-            throw new IllegalArgumentException("Bad URL found when loading jars", e);
+        // derive HOME directory from prefix property
+        String homeDir = System.getProperty(String.format("%s.home", bootPrefix));
+        if (homeDir == null) {
+            throw new IllegalStateException(String.format("The system property '%s' MUST be set", String.format("%s.home", bootPrefix)));
         }
 
-        return array;
+        File home = new File(homeDir);
+        if (!home.exists() || !home.isDirectory()) {
+            throw new IllegalArgumentException(String.format("'%s' is not a valid home directory", homeDir));
+        }
+
+        // derive lib directory from home + lib
+        File lib = new File(homeDir, "lib");
+        if (!lib.exists() || !lib.isDirectory()) {
+            throw new IllegalArgumentException(String.format("'%s' is not a valid lib directory", lib.getAbsolutePath()));
+        }
+
+        try {
+            // Create application classpath from JARs
+            ClassLoader parent = Thread.currentThread().getContextClassLoader();
+            ClassLoader loader = ClassLoaderFactory.create(lib, parent);
+            Thread.currentThread().setContextClassLoader(loader);
+
+            String initResource = System.getProperty(String.format("%s.init", bootPrefix));
+            
+            if (initResource.endsWith(".jar")) {
+                return findAndLoadMain(initResource);
+            }
+            else {
+                return loader.loadClass(initResource);
+            }
+
+        } catch (ClassNotFoundException e) {
+            throw new LoaderException(e);
+        }
     }
 
     /**
-     * @param bootPrefix
-     * @param array
-     * @return class
+     * @param clazz
      */
-    private Class<?> load(String bootPrefix, URL[] array) {
-        String initClassName = System.getProperty(String.format("%s.init", bootPrefix));
-
-        log.info("Initialising and starting: " + initClassName);
-
-        try (URLClassLoader loader = new URLClassLoader(array)) {
-            Thread.currentThread().setContextClassLoader(loader);
-            return loader.loadClass(initClassName);
-        } catch (IOException | ClassNotFoundException e) {
-            throw new IllegalArgumentException("Classloading problem when loading libs", e);
-        }
+    private Class<?> findAndLoadMain(String jarName) {
+        // TODO open jar, find main & startMain
+        return null;
     }
 
     /**
@@ -275,7 +263,7 @@ public class Loader implements Runnable {
     private void startMain(Class<?> clazz) throws InterruptedException {
         try {
             Method main = clazz.getMethod("main", new Class<?>[] { String[].class });
-            main.invoke(null, (Object[]) args);
+            main.invoke(null, (Object) args); // varargs call
 
         } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
             throw new LoaderException(e);

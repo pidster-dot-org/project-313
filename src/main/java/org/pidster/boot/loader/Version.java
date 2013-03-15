@@ -3,7 +3,7 @@
  */
 package org.pidster.boot.loader;
 
-import static java.util.jar.Attributes.Name.IMPLEMENTATION_VERSION;
+import static java.util.jar.Attributes.Name.SPECIFICATION_VERSION;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,7 +31,7 @@ public class Version {
         try (InputStream is = new URL(manifestPath).openStream()) {
             Manifest manifest = new Manifest(is);
             Attributes attr = manifest.getMainAttributes();
-            return attr.getValue(IMPLEMENTATION_VERSION);
+            return attr.getValue(SPECIFICATION_VERSION);
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }

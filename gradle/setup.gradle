@@ -16,7 +16,6 @@
  */
 
 repositories {
-    maven { url 'https://oss.sonatype.org/content/repositories/snapshots' }
     mavenCentral()
 }
 
@@ -34,8 +33,13 @@ task wrapper(type: Wrapper, description: "Create a Gradle self-download wrapper"
 }
 
 task rat << {
-    ant.taskdef(name: 'ratReport', classname: 'org.apache.rat.anttasks.Report', classpath: configurations.rat.asPath)
-    ant.ratReport() {
-        fileset(dir: 'src/main/java')
-    }
+    ant.taskdef(
+            name: 'ratReport',
+            classname: 'org.apache.rat.anttasks.Report',
+            classpath: configurations.rat.asPath)
+    ant.ratReport(
+            reportFile: 'build/rat-report.xml',
+            format: 'xml') {
+                fileset(dir: 'src/main/java', includes: '**/*.java')
+            }
 }

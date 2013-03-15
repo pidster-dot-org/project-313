@@ -31,6 +31,8 @@ import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * @author pidster
@@ -38,7 +40,9 @@ import java.util.concurrent.Callable;
  */
 public class Loader implements Runnable {
 
-    private static final String PROPERTIES = System.getProperty("application.properties");
+    private static final String PROPERTIES = System.getProperty("boot.properties.file", "boot.properties");
+
+    private static final Logger log = Logger.getLogger(Loader.class.getName());
 
     private final String[] args;
 
@@ -57,31 +61,54 @@ public class Loader implements Runnable {
     @Override
     public void run() {
 
+        String version = Version.getVersion();
+        log.info("Starting " + Loader.class.getSimpleName() + " v" + version);
+
         // Check properties file exists, or throw exception
         File propertiesFile = new File(PROPERTIES);
-        if (!propertiesFile.exists()) {
-            throw new IllegalArgumentException(String.format("'%s' is not a valid properties file", PROPERTIES));
+        if (propertiesFile.exists() && propertiesFile.isFile()) {
+            loadSystemProperties(propertiesFile);
+            // Minimal properties can be set inline, the file isn't a strict requirement
+        }
+        else if (!propertiesFile.isFile()) {
+            log.warning(String.format("'%s' is not a valid properties file", PROPERTIES));
         }
 
-        loadSystemProperties(propertiesFile);
+        // find boot prefix
+        String bootPrefix = System.getProperty("boot.prefix");
+        if (bootPrefix == null) {
+            throw new IllegalStateException("The system property 'boot.prefix' MUST be set");
+        }
 
-        // find application name and derive HOME directory
-        String applicationName = System.getProperty("application.name");
-        String homeDir = System.getProperty(String.format("%s.home"), applicationName);
+        log.config("boot.prefix=" + bootPrefix);
+
+        for (int i=0; i<args.length; i++) {
+            String argName = String.format("%s.init.arg%d", bootPrefix, i);
+            System.setProperty(argName, args[i]);
+        }
+
+        logProperties(bootPrefix);
+
+        // derive HOME directory from prefix property
+        String homeDir = System.getProperty(String.format("%s.home", bootPrefix));
+        if (homeDir == null) {
+            throw new IllegalStateException(String.format("The system property '%s' MUST be set", String.format("%s.home", bootPrefix)));
+        }
+
         File home = new File(homeDir);
-        if (!home.exists()) {
-            throw new IllegalArgumentException(String.format("'%s' is not a valid home directory for", PROPERTIES));
+        if (!home.exists() || !home.isDirectory()) {
+            throw new IllegalArgumentException(String.format("'%s' is not a valid home directory", homeDir));
         }
 
         // Create application classpath from JARs
         URL[] array = jarFinder(homeDir);
-        Class<?> init = load(applicationName, array);
+        Class<?> init = load(bootPrefix, array);
 
         // type detection and initialization
         try {
-            initialize(applicationName, init);
+            initialize(bootPrefix, init);
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            log.log(Level.WARNING, "Interrupted...", e);
         }
     }
 
@@ -92,15 +119,37 @@ public class Loader implements Runnable {
      *
      */
     private void loadSystemProperties(File propertiesFile) {
+
+        log.config("Loading properties from " + propertiesFile.getAbsolutePath());
+
         try (InputStream in = new FileInputStream(propertiesFile)) {
             Properties properties = new Properties();
             properties.load(in);
-            System.setProperties(properties);
+            System.getProperties().putAll(properties);
         } catch (FileNotFoundException e) {
             throw new IllegalArgumentException(e);
         } catch (IOException e) {
             throw new IllegalArgumentException(e);
         }
+    }
+
+    /**
+     * @param bootPrefix
+     */
+    private void logProperties(String bootPrefix) {
+        Set<String> propertyNames = System.getProperties().stringPropertyNames();
+        StringBuilder s = new StringBuilder();
+        s.append("Application properties:\n");
+        for (String propertyName : propertyNames) {
+            if (propertyName.startsWith(bootPrefix)) {
+                s.append(" ");
+                s.append(propertyName);
+                s.append("=");
+                s.append(System.getProperty(propertyName));
+                s.append("\n");
+            }
+        }
+        log.config(s.toString());
     }
 
     /**
@@ -131,12 +180,14 @@ public class Loader implements Runnable {
     }
 
     /**
-     * @param applicationName
+     * @param bootPrefix
      * @param array
      * @return class
      */
-    private Class<?> load(String applicationName, URL[] array) {
-        String initClassName = System.getProperty(String.format("%s.init"), applicationName);
+    private Class<?> load(String bootPrefix, URL[] array) {
+        String initClassName = System.getProperty(String.format("%s.init", bootPrefix));
+
+        log.info("Initialising and starting: " + initClassName);
 
         try (URLClassLoader loader = new URLClassLoader(array)) {
             Thread.currentThread().setContextClassLoader(loader);
@@ -147,18 +198,18 @@ public class Loader implements Runnable {
     }
 
     /**
-     * @param applicationName
+     * @param bootPrefix
      * @param initClass
      */
-    private void initialize(String applicationName, Class<?> initClass) throws InterruptedException {
+    private void initialize(String bootPrefix, Class<?> initClass) throws InterruptedException {
         if (Thread.class.isAssignableFrom(initClass)) {
-            startThread(applicationName, initClass);
+            startThread(bootPrefix, initClass);
         }
         else if (Runnable.class.isAssignableFrom(initClass)) {
-            startRunnable(applicationName, initClass);
+            startRunnable(bootPrefix, initClass);
         }
         else if (Callable.class.isAssignableFrom(initClass)) {
-            startCallable(applicationName, initClass);
+            startCallable(bootPrefix, initClass);
         }
         else {
             startMain(initClass);
@@ -166,16 +217,16 @@ public class Loader implements Runnable {
     }
 
     /**
-     * @param applicationName
+     * @param bootPrefix
      * @param raw
      */
-    private void startThread(String applicationName, Class<?> raw) throws InterruptedException {
+    private void startThread(String bootPrefix, Class<?> raw) throws InterruptedException {
         try {
             Class<? extends Thread> clazz = raw.asSubclass(Thread.class);
             Class<?>[] threadArgs = { String.class };
             Constructor<? extends Thread> constructor = clazz.getConstructor(threadArgs);
 
-            Thread thread = constructor.newInstance(applicationName);
+            Thread thread = constructor.newInstance(bootPrefix);
             thread.start();
             thread.join();
         } catch (NoSuchMethodException | SecurityException | InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
@@ -184,15 +235,15 @@ public class Loader implements Runnable {
     }
 
     /**
-     * @param applicationName
+     * @param bootPrefix
      * @param raw
      */
-    private void startRunnable(String applicationName, Class<?> raw) throws InterruptedException {
+    private void startRunnable(String bootPrefix, Class<?> raw) throws InterruptedException {
         try {
             Class<? extends Runnable> clazz = raw.asSubclass(Runnable.class);
             Runnable runnable = clazz.newInstance();
 
-            Thread thread = new Thread(runnable, applicationName);
+            Thread thread = new Thread(runnable, bootPrefix);
             thread.start();
             thread.join();
         } catch (InstantiationException | IllegalAccessException e) {
@@ -201,10 +252,10 @@ public class Loader implements Runnable {
     }
 
     /**
-     * @param applicationName
+     * @param bootPrefix
      * @param raw
      */
-    private void startCallable(String applicationName, Class<?> raw) throws InterruptedException {
+    private void startCallable(String bootPrefix, Class<?> raw) throws InterruptedException {
         try {
             @SuppressWarnings("rawtypes")
             Class<? extends Callable> clazz = raw.asSubclass(Callable.class);

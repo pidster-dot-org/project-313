@@ -16,6 +16,7 @@
  */
 
 apply plugin: 'java'
+apply plugin: 'build-dashboard'
 apply from: 'gradle/setup.gradle'
 apply from: 'gradle/maven.gradle'
 
@@ -33,12 +34,12 @@ dependencies {
 jar {
     manifest {
         attributes (
-            'Main-Class':'org.pidster.boot.loader.Main',
+            'Main-Class':project.mainClassName,
             'Specification-Name': 'Simple Boot Loader',
             'Specification-Vendor': 'pidster.org',
             'Specification-Version': project.version,
-            'Section': 'org.pidster.boot.loader'
-        )
+            'Sealed': 'true'
+            )
     }
 }
 
@@ -48,4 +49,7 @@ task sourceJar(type: Jar) {
     from sourceSets.main.java
 }
 
-task dist(dependsOn: ['build'])
+task buildAll(dependsOn: ['build', 'buildDashboard'])
+
+task publishAll(dependsOn: ['build', 'buildDashboard', 'publish'])
+

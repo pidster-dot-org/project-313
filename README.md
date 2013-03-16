@@ -13,7 +13,11 @@ The loader will discover JARs and resources in the `lib` sub-directory of the sp
 
 ### Quickstart
 
-Relying on the default properties file name, the following will start an application:
+Relying on the default properties (& file name), the following will start an application:
+
+    java -jar boot-loader.jar arg1 arg2 arg3
+
+or:
 
     java -cp boot-loader.jar org.pidster.boot.loader.Main arg1 arg2 arg3
 
